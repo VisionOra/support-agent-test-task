@@ -3,6 +3,21 @@ import json
 import os
 from openai import OpenAI
 from difflib import SequenceMatcher
+from pathlib import Path
+
+# Load environment variables from .env file
+def load_env():
+    """Load environment variables from .env file"""
+    env_path = Path(__file__).parent / '.env'
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key] = value
+
+load_env()
 
 # Page configuration
 st.set_page_config(
@@ -73,14 +88,35 @@ class ThoughtfulAIAgent:
             return []
     
     def _initialize_openai(self):
-        """Initialize OpenAI client for fallback responses"""
+        """Initialize OpenAI client for AI responses"""
         api_key = os.environ.get('OPENAI_API_KEY')
-        if api_key:
-            try:
-                self.openai_client = OpenAI(api_key=api_key)
-            except Exception as e:
-                st.warning(f"OpenAI initialization warning: {str(e)}")
+        
+        if not api_key:
+            st.error("⚠️ No OpenAI API key found. Please set OPENAI_API_KEY in .env file.")
+            return
+            
+        try:
+            # Initialize with minimal parameters to avoid compatibility issues
+            self.openai_client = OpenAI(api_key=api_key)
+            # Test the connection
+            st.success("✅ OpenAI client initialized successfully!")
+        except TypeError as e:
+            if 'proxies' in str(e):
+                # Fallback for older OpenAI versions
+                try:
+                    import openai
+                    openai.api_key = api_key
+                    self.openai_client = openai
+                    st.success("✅ OpenAI client initialized (legacy mode)!")
+                except Exception as e2:
+                    st.error(f"❌ OpenAI initialization failed: {str(e2)}")
+                    self.openai_client = None
+            else:
+                st.error(f"❌ OpenAI initialization error: {str(e)}")
                 self.openai_client = None
+        except Exception as e:
+            st.error(f"❌ OpenAI initialization error: {str(e)}")
+            self.openai_client = None
     
     def _calculate_similarity(self, text1, text2):
         """Calculate similarity score between two texts"""
